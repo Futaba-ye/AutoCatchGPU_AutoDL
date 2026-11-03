@@ -34,6 +34,9 @@
             >0</span
           ></a
         >
+        <a href="#instances" data-nav="instances"
+          ><span data-icon="monitor"></span>账号实例</a
+        >
         <a href="#logs" data-nav="logs"
           ><span data-icon="terminal"></span>运行日志</a
         >
@@ -223,6 +226,89 @@
           </div>
         </section>
 
+        <section class="panel" data-views="instances">
+          <div class="panel-header">
+            <div>
+              <h2>账号已有实例</h2>
+              <p>按平台读取当前账号的全部实例，选择后批量操作。</p>
+            </div>
+            <button id="refresh-instances" class="button secondary small">
+              <span data-icon="refresh"></span>刷新实例
+            </button>
+          </div>
+          <div class="instance-toolbar">
+            <label class="provider-select"
+              ><span>实例平台</span
+              ><select id="instance-provider" aria-label="实例平台"></select
+            ></label>
+            <label class="check-label"
+              ><input
+                type="checkbox"
+                id="instance-select-all"
+              />全选当前页</label
+            >
+            <label class="interval-label"
+              >检测间隔（秒）<input
+                id="instance-interval"
+                type="number"
+                min="10"
+                max="3600"
+                value="30"
+                required
+            /></label>
+          </div>
+          <div id="instance-notice" class="account-notice">
+            连接账号后点击刷新，即可查看已有实例。
+          </div>
+          <div id="account-instance-list">
+            <div class="empty-state">正在等待账号实例查询…</div>
+          </div>
+          <div class="instance-selection-bar">
+            <div>
+              <strong id="instance-selected-count">0</strong> 个实例已选择
+              <p id="instance-selection-help" class="field-help"></p>
+            </div>
+            <div class="instance-buttons">
+              <button
+                id="stop-selected-instances"
+                class="button secondary danger-text"
+                disabled
+              >
+                关机</button
+              ><button
+                id="start-selected-instances"
+                class="button primary"
+                disabled
+              >
+                有卡开机并监控
+              </button>
+            </div>
+          </div>
+          <p
+            id="instance-action-result"
+            class="account-action-result"
+            aria-live="polite"
+          ></p>
+          <div class="resource-pagination">
+            <span id="instance-page-info"></span>
+            <div>
+              <button
+                id="instance-prev"
+                class="button secondary small"
+                disabled
+              >
+                上一页</button
+              ><button
+                id="instance-next"
+                class="button secondary small"
+                disabled
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" data-views="dashboard tasks">
           <div class="panel-header">
             <div>
@@ -244,7 +330,7 @@
               <h2>
                 <span class="heading-icon" data-icon="terminal"></span>运行日志
               </h2>
-              <p>查看资源检测、实例创建和异常记录。</p>
+              <p>查看资源检测、实例创建、开关机和异常记录。</p>
             </div>
             <span class="tag green" id="log-live"
               ><span class="live-dot"></span> 实时更新</span
@@ -351,7 +437,7 @@
             <div class="panel-header">
               <div>
                 <h2>通知偏好</h2>
-                <p>实例创建成功时，按你的偏好提醒。</p>
+                <p>实例创建或有卡开机成功时，按你的偏好提醒。</p>
               </div>
               <span data-icon="bell"></span>
             </div>
@@ -464,6 +550,42 @@
               保存并开始监控 <span data-icon="arrow"></span>
             </button>
           </div>
+        </footer>
+      </form>
+    </dialog>
+    <dialog id="start-task-dialog" class="compact-dialog">
+      <form id="start-task-form">
+        <header class="dialog-header">
+          <div>
+            <h2>修改有卡开机任务</h2>
+            <p>已完成结果保留，修改后手动恢复监控。</p>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            data-close="start-task-dialog"
+            aria-label="关闭开机任务编辑"
+            data-icon="close"
+          ></button>
+        </header>
+        <div class="dialog-body">
+          <label
+            >任务名称<input
+              id="start-task-name"
+              required
+              maxlength="80" /></label
+          ><label
+            >检测间隔（秒）<input
+              id="start-task-interval"
+              type="number"
+              min="10"
+              max="3600"
+              required
+          /></label>
+          <p id="start-task-targets" class="field-help"></p>
+        </div>
+        <footer class="dialog-footer">
+          <button type="submit" class="button primary">保存修改</button>
         </footer>
       </form>
     </dialog>

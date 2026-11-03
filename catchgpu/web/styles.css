@@ -16,6 +16,110 @@
   font-size: 14px;
   font-synthesis: none;
 }
+
+.button.danger-text,
+.text-button.danger-text {
+  color: #b23b37;
+}
+.gpu-emphasis {
+  color: #345d9f;
+  font-weight: 650;
+}
+.log-gpu {
+  font-weight: 750;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.log-gpu.gpu-color-0 {
+  color: #16468a;
+  background: #e6efff;
+}
+.log-gpu.gpu-color-1 {
+  color: #72389c;
+  background: #f2e8fa;
+}
+.log-gpu.gpu-color-2 {
+  color: #9a4d05;
+  background: #fff0da;
+}
+.log-gpu.gpu-color-3 {
+  color: #006966;
+  background: #def4f0;
+}
+.instance-toolbar,
+.instance-selection-bar {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 20px 26px;
+}
+.instance-toolbar {
+  border-bottom: 1px solid var(--line);
+}
+.interval-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.interval-label input {
+  width: 85px;
+}
+.account-notice {
+  background: #f5f8f3;
+  color: #647360;
+  padding: 13px 26px;
+  font-size: 12px;
+}
+.account-table {
+  min-width: 760px;
+}
+.account-table td {
+  vertical-align: middle;
+  line-height: 1.9;
+}
+.account-table code {
+  color: #7b8580;
+  font-size: 11px;
+}
+.instance-selection-bar {
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+}
+.instance-buttons {
+  display: flex;
+  gap: 10px;
+}
+.account-action-result {
+  padding: 0 26px 12px;
+  color: #9b6c27;
+  overflow-wrap: anywhere;
+}
+.account-action-result:empty {
+  display: none;
+}
+#start-task-dialog label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+@media (max-width: 650px) {
+  .instance-toolbar,
+  .instance-selection-bar {
+    padding: 16px;
+    gap: 16px;
+  }
+  .instance-buttons {
+    width: 100%;
+  }
+  .instance-buttons button {
+    flex: 1;
+  }
+  .account-notice {
+    padding: 12px 16px;
+  }
+}
 * {
   box-sizing: border-box;
 }
@@ -710,6 +814,8 @@ input[type="checkbox"] {
 }
 .task-actions > div {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 7px;
 }

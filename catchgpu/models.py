@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 def now() -> str:
@@ -103,14 +103,87 @@ class Rule(Model):
     cuda: int = Field(default=118, ge=100, le=999)
 
 
+STARTABLE_STATES = frozenset(
+    {
+        "shutdown",
+        "shutdown_by_starting_error",
+        "shutdown_by_running_error",
+        "created",
+        "oss_merged",
+        "created_clone_success",
+    }
+)
+
+
+class AccountInstance(Model):
+    """账号实例的展示字段；密码、连接口令和原始响应不进入界面。"""
+
+    id: str
+    name: str
+    gpu_name: str = "未知型号"
+    gpu_count: int = 0
+    region_name: str = ""
+    status: str = "unknown"
+    start_mode: str = "unknown"
+    billing: str = ""
+    created_at: str = ""
+
+    @computed_field
+    @property
+    def can_start(self) -> bool:
+        return self.status in STARTABLE_STATES and self.gpu_count > 0
+
+    @computed_field
+    @property
+    def can_stop(self) -> bool:
+        return self.status in {"running", "starting"}
+
+
+class AccountInstancePage(Model):
+    items: list[AccountInstance] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+    demo: bool = False
+
+
+class StartTarget(Model):
+    instance_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(max_length=200)
+    gpu_name: str = Field(max_length=200)
+    gpu_count: int = Field(ge=1, le=12)
+    region_name: str = Field(default="", max_length=200)
+
+
+class InstanceSelection(Model):
+    instance_ids: list[str] = Field(min_length=1, max_length=100)
+    interval: int = Field(default=30, ge=10, le=3600)
+
+    @model_validator(mode="after")
+    def unique_instances(self):
+        if len(set(self.instance_ids)) != len(self.instance_ids):
+            raise ValueError("实例编号不能重复")
+        if any(not value or len(value) > 200 for value in self.instance_ids):
+            raise ValueError("实例编号无效")
+        return self
+
+
 class TaskInput(Model):
     name: str = Field(default="GPU 资源监控", min_length=1, max_length=80)
     provider: str = Field(min_length=1)
     interval: int = Field(default=30, ge=10, le=3600)
-    rules: list[Rule] = Field(min_length=1, max_length=100)
+    action: Literal["create", "start"] = "create"
+    rules: list[Rule] = Field(default_factory=list, max_length=100)
+    start_targets: list[StartTarget] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def unique_rules(self):
+        if self.action == "create" and (not self.rules or self.start_targets):
+            raise ValueError("创建任务必须填写 GPU 规则，且不能包含已有实例")
+        if self.action == "start" and (not self.start_targets or self.rules):
+            raise ValueError("开机任务必须选择已有实例，且不能包含创建规则")
+        if len({target.instance_id for target in self.start_targets}) != len(self.start_targets):
+            raise ValueError("开机目标不能重复")
         if len({rule.id for rule in self.rules}) != len(self.rules):
             raise ValueError("规则编号不能重复")
         return self

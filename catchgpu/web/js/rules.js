@@ -1,11 +1,12 @@
 // 批量表单与逐行规则共用字段映射，新增约束时只扩展这里和后端 Rule。
 import { $, escape as e, toast } from "./ui.js";
-import { post } from "./api.js";
+import { post, put } from "./api.js";
 
 let rules = [],
   provider = "",
   catalog = null,
-  onSaved = () => {};
+  onSaved = () => {},
+  editTask = null;
 const options = (entries, selected) =>
   entries
     .map(
@@ -60,10 +61,21 @@ export function openRules(
   afterSave,
   sourceTask = null,
   initialRegions = [],
+  edit = false,
 ) {
   provider = currentProvider;
   catalog = currentCatalog;
   onSaved = afterSave;
+  editTask = edit ? sourceTask : null;
+  if (editTask) {
+    catalog = { ...catalog, regions: [...catalog.regions] };
+    for (const id of new Set(
+      sourceTask.rules.flatMap((rule) => rule.regions),
+    )) {
+      if (!catalog.regions.some((region) => region.id === id))
+        catalog.regions.push({ id, name: `${id}（原配置）` });
+    }
+  }
   if (!sourceTask && !selected.length) return;
   const defaults = {
     gpu_count: 1,
@@ -81,7 +93,7 @@ export function openRules(
   rules = sourceTask
     ? sourceTask.rules.map((rule) => ({
         ...rule,
-        id: crypto.randomUUID().replaceAll("-", ""),
+        id: edit ? rule.id : crypto.randomUUID().replaceAll("-", ""),
       }))
     : selected.map((gpu) => ({
         ...defaults,
@@ -91,9 +103,14 @@ export function openRules(
       }));
   $("#batch-fields").innerHTML = fields({ ...defaults, ...rules[0] }, true);
   $("#task-name").value = sourceTask
-    ? `${sourceTask.name.slice(0, 70)}（新任务）`
+    ? edit
+      ? sourceTask.name
+      : `${sourceTask.name.slice(0, 70)}（新任务）`
     : "GPU 资源监控";
   $("#task-interval").value = sourceTask?.interval || 30;
+  $("#rule-dialog .eyebrow").textContent = edit
+    ? "修改监控任务 · 已有结果保留"
+    : "新建监控任务";
   $("#rule-provider-label").textContent =
     `${provider === "demo" ? "演示任务 · 不产生费用" : provider === "autodl-pro" ? "AutoDL Pro 实例" : "AutoDL 普通实例"}`;
   renderRows();
@@ -144,12 +161,15 @@ export function setupRules() {
           rule,
         ),
       );
-      const task = await post("/tasks", {
+      const payload = {
         name: $("#task-name").value.trim(),
         provider,
         interval: Number($("#task-interval").value),
         rules,
-      });
+      };
+      const task = editTask
+        ? await put(`/tasks/${editTask.id}`, payload)
+        : await post("/tasks", payload);
       $("#rule-dialog").close();
       if (event.submitter?.value === "start") {
         try {

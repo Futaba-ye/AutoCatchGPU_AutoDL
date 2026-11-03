@@ -24,6 +24,7 @@ from catchgpu.providers.base import (
     UnsupportedError,
 )
 from catchgpu.providers.transport import AutoDLConnection
+from catchgpu.providers.account_instances import AutoDLInstances
 
 GIB = 1024**3
 BILLING = {"payg": "payg", "day": "daily", "week": "weekly", "month": "monthly"}
@@ -93,6 +94,16 @@ class AutoDLProvider(Provider):
 
     def __init__(self, connection: AutoDLConnection):
         self.connection = connection
+        self.account = AutoDLInstances(connection, pro=self.id == "autodl-pro")
+
+    async def list_instances(self, page=1, page_size=20):
+        return await self.account.list_instances(page, page_size)
+
+    async def power_on(self, instance_id):
+        await self.account.power_on(instance_id)
+
+    async def power_off(self, instance_id):
+        await self.account.power_off(instance_id)
 
     async def catalog(self, region=None):
         gpus, regions = await asyncio.gather(
@@ -434,7 +445,7 @@ class AutoDLProProvider(AutoDLProvider):
                 )
             return result
 
-        groups = await asyncio.gather(*(load(entry) for entry in types))
+        gpu_groups = await asyncio.gather(*(load(entry) for entry in types))
         images = list(BASE_IMAGES)
         notices = [
             "库存与规格实时读取；显示价格为公开每卡时价，创建前再次校验。",
@@ -464,7 +475,7 @@ class AutoDLProProvider(AutoDLProvider):
             except ProviderError:
                 notices.append("私有镜像未能同步，请测试连接或手动填写镜像 UUID。")
         return Catalog(
-            gpus=[gpu for group in groups for gpu in group],
+            gpus=[gpu for group in gpu_groups for gpu in group],
             regions=[Option(id="westDC3", name="西北区"), Option(id="beijingDC2", name="北京区")],
             region_groups=groups,
             active_region=active.id,

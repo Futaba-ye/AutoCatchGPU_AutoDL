@@ -23,6 +23,6 @@ class SilentNotifier:
         self.store = store
         self.messages = []
 
-    async def success(self, task_id, message):
+    async def success(self, task_id, message, *, kind="instance_created", subject=""):
         self.messages.append(message)
-        self.store.event(task_id, "success", message, "instance_created")
+        self.store.event(task_id, "success", message, kind, subject)

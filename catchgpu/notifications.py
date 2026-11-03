@@ -14,8 +14,8 @@ class Notifier:
         self.store = store
         self.native_available = platform.system() == "Windows"
 
-    async def success(self, task_id: str, message: str):
-        self.store.event(task_id, "success", message, "instance_created")
+    async def success(self, task_id: str, message: str, *, kind="instance_created", subject=""):
+        self.store.event(task_id, "success", message, kind, subject)
         if self.store.notification_settings().desktop and self.native_available:
             try:
                 await asyncio.to_thread(self._windows_toast, message)
@@ -27,7 +27,7 @@ class Notifier:
     def _windows_toast(self, message: str):
         toast = Element("toast")
         binding = SubElement(SubElement(toast, "visual"), "binding", template="ToastGeneric")
-        SubElement(binding, "text").text = "CatchGPU · 实例创建成功"
+        SubElement(binding, "text").text = "CatchGPU · 实例已就绪"
         SubElement(binding, "text").text = message
         xml = base64.b64encode(tostring(toast, encoding="utf-8")).decode("ascii")
         script = (

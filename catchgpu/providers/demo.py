@@ -13,9 +13,11 @@ from catchgpu.models import (
     RegionGroup,
     ResourceOffer,
     ResourcePage,
+    AccountInstance,
+    AccountInstancePage,
 )
 from catchgpu.providers.market_data import choose_region
-from catchgpu.providers.base import Provider
+from catchgpu.providers.base import Provider, ProviderError
 
 
 class DemoProvider(Provider):
@@ -25,6 +27,49 @@ class DemoProvider(Provider):
 
     def __init__(self):
         self.instances: dict[str, Instance] = {}
+        self.account_instances = {
+            "demo-existing-3090": AccountInstance(
+                id="demo-existing-3090",
+                name="训练环境 · 演示",
+                gpu_name="RTX 3090",
+                gpu_count=1,
+                region_name="华东 · 演示",
+                status="shutdown",
+                start_mode="gpu",
+                billing="payg",
+            ),
+            "demo-existing-4090": AccountInstance(
+                id="demo-existing-4090",
+                name="推理服务 · 演示",
+                gpu_name="RTX 4090",
+                gpu_count=2,
+                region_name="华北 · 演示",
+                status="running",
+                start_mode="gpu",
+                billing="payg",
+            ),
+        }
+
+    async def list_instances(self, page=1, page_size=20):
+        rows = list(self.account_instances.values())
+        return AccountInstancePage(
+            items=rows[(page - 1) * page_size : page * page_size],
+            total=len(rows),
+            page=page,
+            page_size=page_size,
+            demo=True,
+        )
+
+    async def power_on(self, instance_id):
+        if instance_id not in self.account_instances:
+            raise ProviderError("演示实例不存在")
+        self.account_instances[instance_id].status = "running"
+        self.account_instances[instance_id].start_mode = "gpu"
+
+    async def power_off(self, instance_id):
+        if instance_id not in self.account_instances:
+            raise ProviderError("演示实例不存在")
+        self.account_instances[instance_id].status = "shutdown"
 
     async def catalog(self, region=None):
         groups = [
@@ -124,6 +169,16 @@ class DemoProvider(Provider):
             gpu_count=rule.gpu_count,
         )
         self.instances[name] = instance
+        self.account_instances[instance.id] = AccountInstance(
+            id=instance.id,
+            name=name,
+            gpu_name=rule.gpu_name,
+            gpu_count=rule.gpu_count,
+            region_name="华东 · 演示",
+            status="running",
+            start_mode="gpu",
+            billing=rule.billing,
+        )
         return instance
 
     async def find_instance(self, name, rule):

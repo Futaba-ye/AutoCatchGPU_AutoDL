@@ -62,3 +62,18 @@ export async function busy(button, action) {
     button.disabled = false;
   }
 }
+
+export function logMessage(log) {
+  const subject =
+    log.subject ||
+    /^((?:RTX|GTX|NVIDIA|Tesla|vGPU|GPU|CPU|A\d|H\d)[^：:]{0,110})[：:]/i.exec(
+      log.message,
+    )?.[1] ||
+    "";
+  const index = subject ? log.message.indexOf(subject) : -1;
+  if (index < 0) return escape(log.message);
+  let hash = 0;
+  for (const character of subject)
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return `${escape(log.message.slice(0, index))}<strong class="log-gpu gpu-color-${hash % 4}">${escape(subject)}</strong>${escape(log.message.slice(index + subject.length))}`;
+}

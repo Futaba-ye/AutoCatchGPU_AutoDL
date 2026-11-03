@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from catchgpu.models import Catalog, Instance, Quote, Rule, ResourcePage
+from catchgpu.models import AccountInstancePage, Catalog, Instance, Quote, Rule, ResourcePage
 
 
 class ProviderError(Exception):
@@ -37,6 +37,30 @@ class Provider(ABC):
         self, gpu_id: str, region: str | None = None, page: int = 1, page_size: int = 10
     ) -> ResourcePage:
         raise UnsupportedError("该平台尚未接入资源详情")
+
+    async def list_instances(self, page=1, page_size=20) -> AccountInstancePage:
+        raise UnsupportedError("该平台尚未接入账号实例管理")
+
+    async def selected_instances(self, instance_ids):
+        """从账号列表查找目标，避免信任客户端提供的实例配置。"""
+        wanted, found, page = set(instance_ids), {}, 1
+        while wanted - found.keys():
+            result = await self.list_instances(page, 100)
+            found.update({row.id: row for row in result.items if row.id in wanted})
+            if not result.items or page * result.page_size >= result.total:
+                break
+            page += 1
+            if page > 1000:
+                raise UnsupportedError("账号实例过多，请缩小管理范围后重试")
+        if wanted - found.keys():
+            raise ProviderError("选中的实例已不存在或不属于当前账号，请刷新实例列表")
+        return found
+
+    async def power_on(self, instance_id):
+        raise UnsupportedError("该平台尚未接入有卡开机")
+
+    async def power_off(self, instance_id):
+        raise UnsupportedError("该平台尚未接入关机")
 
     @abstractmethod
     async def quote(self, rule: Rule) -> Quote | None: ...

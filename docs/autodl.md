@@ -1,6 +1,6 @@
 # AutoDL 接入说明
 
-核实日期：2026-11-02。公开文档与官网前端会变化，接口映射统一放在 `catchgpu/providers/autodl.py` 和 `transport.py`。
+核实日期：2026-11-03。公开文档与官网前端会变化，创建映射位于 `catchgpu/providers/autodl.py`，账号列表和开关机位于 `account_instances.py`，官方 API 连接位于 `transport.py`。
 
 ## 接入方式
 
@@ -40,6 +40,16 @@ Pro 型号库存来自 `/api/v1/machine_pro/gpu_type`，规格来自 `/api/v1/ma
 官网金额使用元的千分之一。报价明细按产品拆分为实例与磁盘费用；预付费按所选周期折算时价。Pro 官方 API 没有报价预览，保守使用公开规格时价；包含磁盘时根据当前系统盘阶梯价格计算基础容量和额外容量。
 
 预付费先创建订单，再对返回的订单 UUID 支付。创建订单后任何支付异常都视作结果待核对，避免多次生成订单或重复付费。仅有明确实例 ID 才记录为创建结果；这代表平台已经接受并分配实例，不代表镜像已启动完毕或 SSH 已可连接。
+
+## 已有实例的开关机
+
+普通列表使用 `POST /api/v1/instance`，有卡开机使用 `POST /api/v1/instance/power_on`，关机使用 `POST /api/v1/instance/power_off`。普通官网默认有卡开机请求只传 `instance_uuid`，不调用无卡模式接口。Pro 网页分别使用 `/api/v1/instance/pro`、`/api/v1/instance/pro/power_on` 和 `/api/v1/instance/pro/power_off`，开机明确传 `payload: gpu`。
+
+Pro 已配置开发者 Token 时，列表优先使用 `POST /api/v1/dev/instance/pro/list`，有卡开机使用 `POST /api/v1/dev/instance/pro/power_on`，请求包含 `instance_uuid` 与 `payload: gpu`；关机使用 `POST /api/v1/dev/instance/pro/power_off`，仅传 `instance_uuid`。官方文档注明开机成功响应的 `data` 可以为 `null`，所以不能用非空响应代表运行成功，必须继续读取实例列表确认状态和模式。
+
+实例列表展示 GPU、卡数、地区、状态、启动模式和计费方式，不返回密码和 Jupyter 凭据。已有关机实例使用原配置开机，不经过创建、订单或迁移接口，也不会覆盖用户原来的开机命令。关机只针对明确选择的实例，不调用释放接口。
+
+上述写接口已用模拟响应与演示平台验证，测试不会给真实账号实例开机或关机。
 
 ## 真实账号联调
 

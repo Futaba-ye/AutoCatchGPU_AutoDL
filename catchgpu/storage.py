@@ -36,6 +36,9 @@ class Store:
             );
         """
         )
+        columns = {row["name"] for row in self.db.execute("PRAGMA table_info(events)")}
+        if "subject" not in columns:
+            self.db.execute("ALTER TABLE events ADD COLUMN subject TEXT NOT NULL DEFAULT ''")
         self.db.commit()
 
     def save(self, task: Task):
@@ -57,10 +60,18 @@ class Store:
             for row in self.db.execute("SELECT body FROM tasks ORDER BY rowid DESC")
         ]
 
-    def event(self, task_id: str | None, level: str, message: str, kind: str = "log"):
+    def delete(self, task_id):
+        """只移除本地任务；保留事件与请求记录，不触及平台实例。"""
+        self.get(task_id)
+        self.db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+        self.db.commit()
+
+    def event(
+        self, task_id: str | None, level: str, message: str, kind: str = "log", subject: str = ""
+    ):
         self.db.execute(
-            "INSERT INTO events(task_id,level,message,kind,created_at) VALUES(?,?,?,?,?)",
-            (task_id, level, message, kind, now()),
+            "INSERT INTO events(task_id,level,message,kind,created_at,subject) VALUES(?,?,?,?,?,?)",
+            (task_id, level, message, kind, now(), subject),
         )
         self.db.commit()
 

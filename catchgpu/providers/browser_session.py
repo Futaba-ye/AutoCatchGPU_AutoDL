@@ -173,7 +173,7 @@ class BrowserSession:
                 max_redirects=0,
             )
             if response.status >= 500 and mutation:
-                raise UncertainCreation("AutoDL 创建请求返回服务器错误，结果待核对")
+                raise UncertainCreation("AutoDL 实例操作返回服务器错误，结果待核对")
             if response.status in (401, 403):
                 raise AuthenticationError("AutoDL 网页登录已失效，请重新登录")
             if not response.ok:
@@ -183,9 +183,7 @@ class BrowserSession:
             raise
         except Exception:
             if mutation:
-                raise UncertainCreation(
-                    "创建或支付请求中断，可能已被平台接收，请核对结果"
-                ) from None
+                raise UncertainCreation("实例操作请求中断，可能已被平台接收，请核对结果") from None
             raise ProviderError("AutoDL 网页请求失败，请检查网络或登录窗口") from None
 
     async def _detach(self):

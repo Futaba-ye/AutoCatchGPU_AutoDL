@@ -16,7 +16,14 @@ from pydantic import Field, SecretStr
 
 from catchgpu.config import Settings
 from catchgpu.locking import WorkspaceLock
-from catchgpu.models import Model, NotificationSettings, Task, TaskInput, FavoriteInput
+from catchgpu.models import (
+    Model,
+    NotificationSettings,
+    Task,
+    TaskInput,
+    FavoriteInput,
+    InstanceSelection,
+)
 from catchgpu.notifications import Notifier
 from catchgpu.providers.autodl import AutoDLProProvider, AutoDLProvider
 from catchgpu.providers.base import ProviderError
@@ -194,6 +201,7 @@ def create_app(settings: Settings | None = None, providers_override=None):
 
     @app.put("/api/connection/token")
     async def set_token(credentials: Credentials):
+        ensure_browser_idle()
         if any(task.status == "running" for task in app.state.store.tasks()):
             raise HTTPException(409, "请先暂停所有任务，再修改登录凭据")
         token = credentials.token.get_secret_value().strip()
@@ -232,6 +240,8 @@ def create_app(settings: Settings | None = None, providers_override=None):
         return {"detail": "网页登录状态已校验，工具连接成功；请保留该浏览器窗口"}
 
     def ensure_browser_idle():
+        if app.state.scheduler.control.locked():
+            raise HTTPException(409, "正在处理实例或任务操作，请等待结束后再更换连接")
         if any(not worker.done() for worker in app.state.scheduler.workers.values()):
             raise HTTPException(409, "请先暂停所有监控任务，并等待在途请求结束后再连接登录浏览器")
 
@@ -239,10 +249,45 @@ def create_app(settings: Settings | None = None, providers_override=None):
     async def create_task(data: TaskInput):
         if data.provider not in app.state.providers:
             raise HTTPException(422, "请选择有效的平台")
+        if data.action != "create":
+            raise HTTPException(422, "请从账号实例列表选择已有实例，创建有卡开机监控")
         task = Task(**data.model_dump())
         app.state.store.save(task)
         app.state.store.event(task.id, "info", "任务已保存，可点击开始监控")
         return task
+
+    @app.put("/api/tasks/{task_id}")
+    async def update_task(task_id: str, data: TaskInput):
+        return await app.state.scheduler.update(task_id, data)
+
+    @app.delete("/api/tasks/{task_id}")
+    async def delete_task(task_id: str):
+        await app.state.scheduler.delete(task_id)
+        return {"detail": "监控任务已删除，平台实例保持不变"}
+
+    def account_provider(provider_id):
+        provider = app.state.providers.get(provider_id)
+        if provider is None:
+            raise HTTPException(404, "平台不存在")
+        return provider
+
+    @app.get("/api/instances/{provider_id}")
+    async def account_instances(
+        provider_id: str,
+        page: int = Query(1, ge=1, le=1000),
+        page_size: int = Query(20, ge=1, le=100),
+    ):
+        return await account_provider(provider_id).list_instances(page, page_size)
+
+    @app.post("/api/instances/{provider_id}/start-monitor", status_code=201)
+    async def monitor_start(provider_id: str, data: InstanceSelection):
+        account_provider(provider_id)
+        return await app.state.scheduler.add_start_task(provider_id, data)
+
+    @app.post("/api/instances/{provider_id}/stop")
+    async def stop_instances(provider_id: str, data: InstanceSelection):
+        account_provider(provider_id)
+        return {"results": await app.state.scheduler.power_off(provider_id, data.instance_ids)}
 
     @app.post("/api/tasks/{task_id}/start")
     async def start_task(task_id: str):
@@ -266,8 +311,8 @@ def create_app(settings: Settings | None = None, providers_override=None):
     @app.post("/api/tasks/{task_id}/attempts/{attempt_id}/missing")
     async def confirm_missing(task_id: str, attempt_id: str, data: MissingConfirmation):
         if not data.confirmed:
-            raise HTTPException(422, "必须先在 AutoDL 核实没有实例和未支付订单")
-        app.state.scheduler.confirm_missing(task_id, attempt_id)
+            raise HTTPException(422, "必须先在 AutoDL 核实该操作未生效")
+        await app.state.scheduler.confirm_missing(task_id, attempt_id)
         return app.state.store.get(task_id)
 
     @app.get("/api/events")

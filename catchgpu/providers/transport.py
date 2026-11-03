@@ -36,14 +36,14 @@ class AutoDLConnection:
             if response.status_code in (401, 403):
                 raise AuthenticationError("AutoDL 凭据无效或已过期")
             if response.status_code >= 500 and mutation:
-                raise UncertainCreation("AutoDL 服务端错误，创建结果待核对")
+                raise UncertainCreation("AutoDL 服务端错误，实例操作结果待核对")
             response.raise_for_status()
             return unpack(response.json())
         except ProviderError:
             raise
         except (httpx.HTTPError, ValueError):
             if mutation:
-                raise UncertainCreation("AutoDL 创建请求超时或响应异常，请核对结果") from None
+                raise UncertainCreation("AutoDL 实例操作超时或响应异常，请核对结果") from None
             raise ProviderError("AutoDL 请求失败，请检查网络连接及平台服务状态") from None
 
     async def close(self):
