@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#17251f" />
+    <title>CatchGPU · 算力监控台</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script type="module" src="/static/js/app.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"
+        ><span class="brand-icon">C<span>↗</span></span
+        ><span>CatchGPU<small>你的算力，随时就绪</small></span></a
+      >
+      <div class="nav-label">工作空间</div>
+      <nav aria-label="主导航">
+        <a href="#dashboard" data-nav="dashboard"
+          ><span data-icon="grid"></span>监控概览</a
+        >
+        <a href="#resources" data-nav="resources"
+          ><span data-icon="chip"></span>GPU 资源<span
+            class="nav-count"
+            id="nav-gpu-count"
+            >—</span
+          ></a
+        >
+        <a href="#tasks" data-nav="tasks"
+          ><span data-icon="activity"></span>监控任务<span
+            class="nav-count"
+            id="nav-task-count"
+            >0</span
+          ></a
+        >
+        <a href="#logs" data-nav="logs"
+          ><span data-icon="terminal"></span>运行日志</a
+        >
+        <a href="#settings" data-nav="settings"
+          ><span data-icon="settings"></span>连接与通知</a
+        >
+      </nav>
+      <div class="sidebar-note">
+        <span class="live-dot"></span>持续监控，自动捕获
+        <p>符合你的条件时，<br />自动创建所需实例。</p>
+      </div>
+      <div class="sidebar-bottom">
+        <span class="local-icon" data-icon="monitor"></span>
+        <div>本地工作空间<small id="service-status">正在连接服务…</small></div>
+        <span class="live-dot"></span>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <span class="breadcrumb">工作空间</span><span class="slash">/</span
+          ><span id="page-name">监控概览</span>
+        </div>
+        <div class="topbar-right">
+          <span class="connection-indicator" id="connection-badge"
+            >尚未连接 AutoDL</span
+          ><button
+            class="icon-button"
+            id="open-settings"
+            aria-label="打开连接与通知设置"
+            data-icon="settings"
+          ></button>
+        </div>
+      </header>
+      <div class="main-content">
+        <section class="page-heading">
+          <div>
+            <div class="eyebrow">
+              算力监控台 <span class="eyebrow-line"></span>
+            </div>
+            <h1 id="page-title">让算力等待，变成算力就绪。</h1>
+            <p id="page-description">
+              选择 GPU、设定限制，剩下的交给持续监控。
+            </p>
+          </div>
+          <a
+            href="https://www.autodl.com/console/instance/list"
+            target="_blank"
+            rel="noreferrer"
+            class="button secondary"
+            >打开 AutoDL <span data-icon="external"></span
+          ></a>
+        </section>
+        <div id="global-error" class="notice error" role="alert" hidden></div>
+
+        <section class="stats" data-views="dashboard">
+          <article class="stat">
+            <span class="stat-label"
+              >资源型号<span data-icon="chip"></span></span
+            ><strong id="stat-gpus">—</strong><small>当前平台的 GPU 目录</small>
+          </article>
+          <article class="stat">
+            <span class="stat-label">监控中<span data-icon="radar"></span></span
+            ><strong id="stat-running">0<span>个任务</span></strong
+            ><small><span class="live-dot"></span> 后台持续检测资源</small>
+          </article>
+          <article class="stat">
+            <span class="stat-label"
+              >已创建实例<span data-icon="check"></span></span
+            ><strong id="stat-created">0<span>个实例</span></strong
+            ><small>已记录的创建结果</small>
+          </article>
+          <article class="stat">
+            <span class="stat-label"
+              >需要关注<span data-icon="bell"></span></span
+            ><strong id="stat-attention">0<span>个任务</span></strong
+            ><small>登录失效或结果待核对</small>
+          </article>
+        </section>
+
+        <section class="panel resources-panel" data-views="dashboard resources">
+          <div class="panel-header">
+            <div>
+              <h2>
+                GPU 资源
+                <span class="tag neutral" id="catalog-count">实时目录</span>
+              </h2>
+              <p>先选地区与型号，再查看资源详情、批量设置监控限制。</p>
+            </div>
+            <button id="refresh-catalog" class="button secondary small">
+              <span data-icon="refresh"></span>刷新资源
+            </button>
+          </div>
+          <div class="resource-toolbar">
+            <label class="provider-select"
+              ><span>资源平台</span
+              ><select id="provider" aria-label="资源平台"></select
+            ></label>
+            <div class="search-box">
+              <span data-icon="search"></span
+              ><input
+                id="gpu-search"
+                type="search"
+                placeholder="搜索 GPU 型号…"
+                aria-label="搜索 GPU 型号"
+              />
+            </div>
+            <label class="check-label"
+              ><input type="checkbox" id="available-only" />仅看有库存</label
+            ><label class="check-label"
+              ><input type="checkbox" id="favorite-only" />仅看收藏</label
+            ><label class="check-label"
+              ><input type="checkbox" id="select-visible" />全选当前结果</label
+            >
+          </div>
+          <div
+            id="resource-connection"
+            class="resource-connection"
+            aria-live="polite"
+          ></div>
+          <div class="market-filter-row">
+            <span class="market-filter-label">选择地区</span>
+            <div
+              id="region-options"
+              class="region-options"
+              aria-label="选择地区"
+            ></div>
+          </div>
+          <div class="market-filter-row favorite-filter-row">
+            <span class="market-filter-label">我的收藏</span>
+            <div id="favorite-strip" class="favorite-strip"></div>
+          </div>
+          <div id="catalog-notices" class="catalog-notices"></div>
+          <div class="market-filter-row gpu-filter-row">
+            <span class="market-filter-label">GPU 型号</span>
+            <div id="gpu-grid" class="gpu-options" aria-live="polite">
+              <div class="empty-state">正在读取 GPU 资源…</div>
+            </div>
+          </div>
+          <section
+            id="resource-details"
+            class="resource-details"
+            hidden
+            aria-label="选中型号的资源详情"
+          >
+            <div class="resource-detail-heading">
+              <div>
+                <h3 id="resource-detail-title">资源详情</h3>
+                <p id="resource-detail-description"></p>
+              </div>
+              <button id="refresh-details" class="text-button">刷新详情</button>
+            </div>
+            <div id="selected-gpu-tabs" class="selected-gpu-tabs"></div>
+            <div id="resource-detail-content" aria-live="polite"></div>
+            <div class="resource-pagination">
+              <span id="resource-page-info"></span>
+              <div>
+                <button id="resource-prev" class="button secondary small">
+                  上一页</button
+                ><button id="resource-next" class="button secondary small">
+                  下一页
+                </button>
+              </div>
+            </div>
+          </section>
+          <div class="selection-bar">
+            <span
+              ><span class="selection-number" id="selected-count">0</span> 种
+              GPU 已选择
+              <span class="muted selection-hint"
+                >每种型号可设置独立目标</span
+              ></span
+            >
+            <div>
+              <button class="text-button" id="clear-selection">清空选择</button
+              ><button class="button primary" id="configure-rules" disabled>
+                批量设置限制 <span data-icon="arrow"></span>
+              </button>
+            </div>
+          </div>
+          <div class="panel-foot">
+            <span class="live-dot"></span
+            ><span id="catalog-time">目录尚未加载</span
+            ><span class="foot-spacer"></span
+            ><span>实际库存与价格会在创建前校验</span>
+          </div>
+        </section>
+
+        <section class="panel" data-views="dashboard tasks">
+          <div class="panel-header">
+            <div>
+              <h2>
+                监控任务 <span class="tag neutral" id="task-total">0</span>
+              </h2>
+              <p>每条规则独立计算目标，全部完成后自动停止。</p>
+            </div>
+            <button class="text-button" id="go-resources">
+              选择资源 <span data-icon="arrow"></span>
+            </button>
+          </div>
+          <div id="task-list" aria-live="polite"></div>
+        </section>
+
+        <section class="panel logs-panel" data-views="dashboard logs">
+          <div class="panel-header">
+            <div>
+              <h2>
+                <span class="heading-icon" data-icon="terminal"></span>运行日志
+              </h2>
+              <p>查看资源检测、实例创建和异常记录。</p>
+            </div>
+            <span class="tag green" id="log-live"
+              ><span class="live-dot"></span> 实时更新</span
+            >
+          </div>
+          <div class="log-filters">
+            <select id="log-task" aria-label="按任务筛选日志">
+              <option value="">全部任务</option></select
+            ><select id="log-level" aria-label="按级别筛选日志">
+              <option value="">全部级别</option>
+              <option value="info">信息</option>
+              <option value="success">成功</option>
+              <option value="warning">警告</option>
+              <option value="error">错误</option></select
+            ><input
+              id="log-search"
+              type="search"
+              placeholder="搜索日志内容…"
+              aria-label="搜索日志内容"
+            />
+          </div>
+          <div
+            id="log-list"
+            class="log-list"
+            role="log"
+            aria-live="polite"
+          ></div>
+          <div class="panel-foot">
+            展示最近 200 条记录，历史日志保留在本地数据库。
+          </div>
+        </section>
+
+        <section class="settings-grid" data-views="settings" hidden>
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>AutoDL 连接</h2>
+                <p>Pro 按量计费优先使用官方 API。</p>
+              </div>
+              <span data-icon="link"></span>
+            </div>
+            <div class="settings-body">
+              <form id="token-form">
+                <label
+                  >开发者 Token<input
+                    type="password"
+                    id="autodl-token"
+                    autocomplete="off"
+                    placeholder="填写后仅保留在本次服务进程中"
+                /></label>
+                <p class="field-help">
+                  AutoDL 控制台 → 账号 → 设置 → 开发者
+                  Token。重新启动工具后需重新填写，也可使用 AUTODL_TOKEN
+                  环境变量。
+                </p>
+                <div class="button-row">
+                  <button class="button primary" type="submit">
+                    保存 Token</button
+                  ><button
+                    type="button"
+                    class="button secondary"
+                    id="test-connection"
+                  >
+                    测试连接</button
+                  ><button type="button" class="text-button" id="clear-token">
+                    清除 Token
+                  </button>
+                </div>
+              </form>
+              <div class="separator"></div>
+              <h3>手动登录浏览器</h3>
+              <p class="field-help">
+                普通实例及 Pro
+                预付费任务使用网页登录。先用本机浏览器手动完成登录和安全认证，进入
+                AutoDL 控制台后，再连接工具。
+              </p>
+              <label
+                >登录使用的浏览器<select id="login-browser">
+                  <option value="auto">自动选择本机 Chrome / Edge</option>
+                </select></label
+              >
+              <div class="button-row" style="margin-top: 14px">
+                <button class="button secondary" id="browser-login">
+                  <span data-icon="external"></span>1. 打开浏览器登录
+                </button>
+                <button class="button primary" id="browser-connect" disabled>
+                  2. 登录完成，连接工具
+                </button>
+              </div>
+              <p class="field-help" id="login-status">登录状态尚未连接</p>
+              <p class="field-help">
+                工具会使用独立的浏览器窗口与登录资料。连接成功后请保留该窗口；首次登录时不会连接或操作安全认证页面。
+              </p>
+              <a
+                class="inline-link"
+                href="https://www.autodl.com/docs/instance_pro_api/"
+                target="_blank"
+                rel="noreferrer"
+                >查看 AutoDL 官方 API 文档 ↗</a
+              >
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>通知偏好</h2>
+                <p>实例创建成功时，按你的偏好提醒。</p>
+              </div>
+              <span data-icon="bell"></span>
+            </div>
+            <div class="settings-body">
+              <label class="setting-toggle"
+                ><span
+                  ><strong>桌面通知</strong
+                  ><small id="desktop-description"
+                    >Windows 原生通知；关闭网页后也可提醒。</small
+                  ></span
+                ><input
+                  type="checkbox"
+                  id="notify-desktop"
+                  class="switch" /></label
+              ><label class="setting-toggle"
+                ><span
+                  ><strong>网页语音提示</strong
+                  ><small>网页保持打开时播报成功消息。</small></span
+                ><input
+                  type="checkbox"
+                  id="notify-speech"
+                  class="switch" /></label
+              ><button class="button secondary" id="test-speech">
+                试听语音
+              </button>
+              <p class="field-help">
+                关闭网页不会停止后台任务；退出工具服务或电脑休眠会中断监控。重启工具后，任务会暂停等待你手动恢复。
+              </p>
+            </div>
+          </article>
+        </section>
+        <footer class="page-footer">
+          <span class="footer-brand">CatchGPU</span
+          ><span>把时间留给重要的工作。</span><span class="foot-spacer"></span
+          ><span>本地优先 · 可扩展平台接入</span>
+        </footer>
+      </div>
+    </main>
+
+    <dialog id="rule-dialog" class="rule-dialog">
+      <form id="rule-form">
+        <header class="dialog-header">
+          <div>
+            <span class="eyebrow">新建监控任务</span>
+            <h2>为选中的 GPU 设置限制</h2>
+            <p>先批量填写，再按需调整每条规则。每种 GPU 的目标会分别完成。</p>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            data-close="rule-dialog"
+            aria-label="关闭配置窗口"
+            data-icon="close"
+          ></button>
+        </header>
+        <div class="dialog-body">
+          <div class="task-basics">
+            <label
+              >任务名称<input
+                name="task_name"
+                id="task-name"
+                required
+                maxlength="80"
+                value="GPU 资源监控" /></label
+            ><label
+              >检测间隔（秒）<input
+                name="interval"
+                id="task-interval"
+                type="number"
+                min="10"
+                max="3600"
+                value="30"
+                required
+            /></label>
+          </div>
+          <div class="batch-panel">
+            <div class="batch-title">
+              <h3><span data-icon="layers"></span>批量限制表单</h3>
+              <span>点击应用后覆盖下方全部规则</span>
+            </div>
+            <div class="form-grid" id="batch-fields"></div>
+            <div class="batch-footer">
+              <span class="field-help"
+                >价格按人民币/小时比较；包日、包周、包月会折算到每小时。</span
+              ><button
+                type="button"
+                id="apply-batch"
+                class="button secondary small"
+              >
+                应用到全部规则
+              </button>
+            </div>
+          </div>
+          <div class="rules-heading">
+            <h3>各 GPU 的监控规则</h3>
+            <span class="muted" id="rule-count"></span>
+          </div>
+          <div id="rule-rows"></div>
+          <div class="notice subtle">
+            磁盘容量填写额外扩容
+            GB。勾选“包含磁盘费用”后，按所选口径合并计算；未取得完整报价时不会创建实例。
+          </div>
+        </div>
+        <footer class="dialog-footer">
+          <span id="rule-provider-label" class="muted"></span>
+          <div>
+            <button type="submit" class="button secondary" value="save">
+              仅保存任务</button
+            ><button type="submit" class="button primary" value="start">
+              保存并开始监控 <span data-icon="arrow"></span>
+            </button>
+          </div>
+        </footer>
+      </form>
+    </dialog>
+    <dialog id="pending-dialog" class="compact-dialog">
+      <header class="dialog-header">
+        <div>
+          <h2>核对创建结果</h2>
+          <p>平台响应不明确时，先检查实例列表与待支付订单。</p>
+        </div>
+        <button
+          class="icon-button"
+          data-close="pending-dialog"
+          aria-label="关闭核对窗口"
+          data-icon="close"
+        ></button>
+      </header>
+      <div class="dialog-body" id="pending-content"></div>
+    </dialog>
+    <dialog id="access-dialog" class="compact-dialog">
+      <form id="access-form">
+        <header class="dialog-header">
+          <div>
+            <h2>连接工作空间</h2>
+            <p>该服务配置了访问密钥，请输入后继续。</p>
+          </div>
+        </header>
+        <div class="dialog-body">
+          <label
+            >工具访问密钥<input
+              id="access-token"
+              type="password"
+              autocomplete="off"
+              required
+          /></label>
+          <p id="access-error" role="alert" class="error-text"></p>
+        </div>
+        <footer class="dialog-footer">
+          <button type="submit" class="button primary">连接</button>
+        </footer>
+      </form>
+    </dialog>
+    <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  </body>
+</html>
