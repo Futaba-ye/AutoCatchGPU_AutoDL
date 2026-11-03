@@ -6,6 +6,7 @@ from catchgpu.providers.base import (
     AuthenticationError,
     OutOfStock,
     ProviderError,
+    RequestRejected,
     UnsupportedError,
 )
 
@@ -51,14 +52,19 @@ def unpack(body):
         raise OutOfStock(f"库存不足或主机已不可用（{code}）")
     if lower == "badrequest":
         if re.search(r"参数|字段|param|payload|uuid|invalid.argument|请求数据", message):
-            raise UnsupportedError(
-                "AutoDL 拒绝请求（BadRequest）：请求参数不符合平台接口要求，请检查适配器或实例状态"
+            raise RequestRejected(
+                "AutoDL 拒绝请求（BadRequest）：请求参数不符合平台接口要求，请检查适配器或实例状态",
+                code=code,
+                reason="parameters",
             )
         if re.search(r"到期|租期|expired", message):
-            raise UnsupportedError(
-                "AutoDL 拒绝请求（BadRequest）：实例计费周期已到期，请在官网核对状态"
+            raise RequestRejected(
+                "AutoDL 拒绝请求（BadRequest）：实例计费周期已到期，请在官网核对状态",
+                code=code,
+                reason="expired",
             )
-        raise UnsupportedError(
-            "AutoDL 拒绝请求（BadRequest）：当前实例状态或请求条件不符合要求，尚未识别具体原因，请在官网核对；不能据此判断为余额或实名认证问题"
+        raise RequestRejected(
+            "AutoDL 拒绝请求（BadRequest）：当前实例状态或请求条件不符合要求，尚未识别具体原因，请在官网核对；不能据此判断为余额或实名认证问题",
+            code=code,
         )
     raise ProviderError(f"AutoDL 拒绝请求（{code}），请在官网核对该操作的具体原因")

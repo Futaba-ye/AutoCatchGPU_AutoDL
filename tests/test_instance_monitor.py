@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from catchgpu.models import InstanceSelection
+from catchgpu.providers.autodl_response import unpack
 from catchgpu.providers.base import OutOfStock, ProviderError, UncertainCreation
 from catchgpu.providers.demo import DemoProvider
 from catchgpu.scheduler import Scheduler
@@ -45,7 +46,7 @@ class ExistingOnly(DemoProvider):
 async def test_stock_retry_completes_original_instance_and_notifies_once(store):
     class Stock(ExistingOnly):
         async def power_on(self, instance_id):
-            if not self.starts:
+            if self.starts < 3:
                 self.starts += 1
                 raise OutOfStock("GPU 不足")
             await super().power_on(instance_id)
@@ -55,11 +56,12 @@ async def test_stock_retry_completes_original_instance_and_notifies_once(store):
     task = await scheduler.add_start_task("demo", InstanceSelection(instance_ids=[INSTANCE]))
     await wait_until(lambda: store.get(task.id).status == "completed")
     await scheduler.close()
-    assert provider.starts == 2 and not provider.instances
+    assert provider.starts == 4 and not provider.instances
     assert [row.id for row in store.get(task.id).instances] == [INSTANCE]
     assert not store.pending(task.id) and len(notifier.messages) == 1
     assert any(row["kind"] == "instance_started" for row in store.events())
-    assert any(row["subject"] == "RTX 3090" and "下轮" in row["message"] for row in store.events())
+    waiting = [row for row in store.events() if "暂无符合库存" in row["message"]]
+    assert len(waiting) == 3 and all(row["level"] == "info" for row in waiting)
 
 
 async def test_accepted_start_is_polled_and_never_sent_twice(store):
@@ -204,9 +206,17 @@ async def test_known_empty_host_waits_without_power_request_then_starts(store):
     provider.account_instances[INSTANCE].available_gpus = 0
     scheduler, notifier = prepare(store, provider)
     task = await scheduler.add_start_task("demo", InstanceSelection(instance_ids=[INSTANCE]))
-    await wait_until(lambda: store.get(task.id).checks >= 3)
+    await wait_until(lambda: store.get(task.id).checks >= 10)
     assert provider.starts == 0 and not store.pending(task.id) and not notifier.messages
-    assert any("空闲 GPU 0 张，需要 1 张" in row["message"] for row in store.events())
+    current = store.get(task.id)
+    assert current.status == "running" and current.next_check_at and not current.last_error
+    assert not scheduler.workers[task.id].done()
+    waiting = [row for row in store.events() if row["subject"] == "RTX 3090"]
+    assert len(waiting) >= 10
+    assert all(
+        row["message"] == "RTX 3090：暂无符合库存的资源" and row["level"] == "info"
+        for row in waiting
+    )
     provider.account_instances[INSTANCE].available_gpus = 1
     await wait_until(lambda: store.get(task.id).status == "completed")
     await scheduler.close()
@@ -222,3 +232,45 @@ async def test_prepaid_reserved_gpu_does_not_use_payg_idle_gate(store):
     await wait_until(lambda: store.get(task.id).status == "completed")
     await scheduler.close()
     assert provider.starts == 1
+
+
+async def test_inventory_lost_before_start_bad_request_keeps_monitor_running(store):
+    class Race(ExistingOnly):
+        async def power_on(self, instance_id):
+            self.starts += 1
+            if self.starts == 1:
+                self.account_instances[instance_id].available_gpus = 0
+                unpack({"code": "BadRequest", "msg": "本次请求未成功"})
+            await DemoProvider.power_on(self, instance_id)
+
+    provider = Race()
+    provider.account_instances[INSTANCE].available_gpus = 1
+    scheduler, notifier = prepare(store, provider)
+    task = await scheduler.add_start_task("demo", InstanceSelection(instance_ids=[INSTANCE]))
+    await wait_until(lambda: store.get(task.id).checks >= 10)
+    waiting = store.get(task.id)
+    assert waiting.status == "running" and waiting.next_check_at and not waiting.last_error
+    assert provider.starts == 1 and not store.pending(task.id) and not notifier.messages
+    assert all(row["level"] == "info" for row in store.events() if "暂无符合库存" in row["message"])
+    provider.account_instances[INSTANCE].available_gpus = 1
+    await wait_until(lambda: store.get(task.id).status == "completed")
+    await scheduler.close()
+    assert provider.starts == 2 and len(notifier.messages) == 1
+
+
+@pytest.mark.parametrize("message", ["参数 payload 无效", "无法识别的业务限制"])
+async def test_non_stock_bad_request_is_not_hidden_as_inventory(store, message):
+    class Rejected(ExistingOnly):
+        async def power_on(self, instance_id):
+            self.starts += 1
+            self.account_instances[instance_id].available_gpus = 0 if "参数" in message else 1
+            unpack({"code": "BadRequest", "msg": message})
+
+    provider = Rejected()
+    provider.account_instances[INSTANCE].available_gpus = 1
+    scheduler, notifier = prepare(store, provider)
+    task = await scheduler.add_start_task("demo", InstanceSelection(instance_ids=[INSTANCE]))
+    await wait_until(lambda: store.get(task.id).status == "attention")
+    await scheduler.close()
+    assert provider.starts == 1 and not notifier.messages
+    assert not any("暂无符合库存" in row["message"] for row in store.events())

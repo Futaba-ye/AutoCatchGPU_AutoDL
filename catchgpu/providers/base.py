@@ -17,6 +17,14 @@ class UnsupportedError(ProviderError):
     """平台尚不支持或返回结构已变化。"""
 
 
+class RequestRejected(UnsupportedError):
+    """平台明确拒绝请求，保留错误类别供业务层只读核对。"""
+
+    def __init__(self, message, *, code, reason="unknown"):
+        super().__init__(message)
+        self.code, self.reason = code, reason
+
+
 class OutOfStock(ProviderError):
     """库存已被其他用户占用，可下轮重试。"""
 

@@ -7,6 +7,7 @@ from catchgpu.providers.base import (
     AuthenticationError,
     OutOfStock,
     ProviderError,
+    RequestRejected,
     UncertainCreation,
     UnsupportedError,
 )
@@ -15,6 +16,23 @@ from catchgpu.providers.base import (
 class InstanceMonitor:
     def __init__(self, store, notifier):
         self.store, self.notifier = store, notifier
+
+    @staticmethod
+    def lacks_stock(row, target):
+        return (
+            row.can_start
+            and row.billing == "payg"
+            and row.available_gpus is not None
+            and row.available_gpus < target.gpu_count
+            and row.gpu_count == target.gpu_count
+            and row.gpu_name == target.gpu_name
+            and row.region_name == target.region_name
+        )
+
+    def wait_for_stock(self, task, target):
+        self.store.event(
+            task.id, "info", f"{target.gpu_name}：暂无符合库存的资源", subject=target.gpu_name
+        )
 
     async def round(self, task, provider, stop=None, *, allow_send=True):
         completed = {instance.id for instance in task.instances}
@@ -71,17 +89,8 @@ class InstanceMonitor:
                 )
             # 普通按量实例固定在原主机。已知卡数不足时等待，不发送必然失败的开机请求。
             # 已接受的开机请求先在上方核对；此时 GPU 可能已分配，不能再次按空闲量判断。
-            if (
-                row.billing == "payg"
-                and row.available_gpus is not None
-                and row.available_gpus < target.gpu_count
-            ):
-                self.store.event(
-                    task.id,
-                    "info",
-                    f"{target.gpu_name}：原主机空闲 GPU {row.available_gpus} 张，需要 {target.gpu_count} 张，等待库存，下轮继续检测",
-                    subject=target.gpu_name,
-                )
+            if self.lacks_stock(row, target):
+                self.wait_for_stock(task, target)
                 continue
             attempt = self.store.begin_attempt(task, row.id, f"power-{uid()}")
             self.store.event(
@@ -96,13 +105,17 @@ class InstanceMonitor:
                 raise
             except OutOfStock:
                 self.store.finish_attempt(attempt, "rejected")
-                self.store.event(
-                    task.id,
-                    "warning",
-                    f"{target.gpu_name}：暂无可用于该实例的 GPU，下轮继续尝试有卡开机",
-                    subject=target.gpu_name,
-                )
+                self.wait_for_stock(task, target)
                 continue
+            except RequestRejected as exc:
+                self.store.finish_attempt(attempt, "rejected")
+                if exc.code.lower() == "badrequest" and exc.reason == "unknown":
+                    # 检测后库存可能被抢走。通用拒绝须重新读取库存，确认不足才继续等待。
+                    current = (await provider.selected_instances([row.id]))[row.id]
+                    if self.lacks_stock(current, target):
+                        self.wait_for_stock(task, target)
+                        continue
+                raise
             except (AuthenticationError, UnsupportedError, ProviderError):
                 self.store.finish_attempt(attempt, "rejected")
                 raise
