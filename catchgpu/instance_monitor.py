@@ -69,6 +69,20 @@ class InstanceMonitor:
                 raise UnsupportedError(
                     f"{target.gpu_name}：实例 {row.id} 当前不能有卡开机（{row.status} / {row.start_mode}），请先在实例列表核对"
                 )
+            # 普通按量实例固定在原主机。已知卡数不足时等待，不发送必然失败的开机请求。
+            # 已接受的开机请求先在上方核对；此时 GPU 可能已分配，不能再次按空闲量判断。
+            if (
+                row.billing == "payg"
+                and row.available_gpus is not None
+                and row.available_gpus < target.gpu_count
+            ):
+                self.store.event(
+                    task.id,
+                    "info",
+                    f"{target.gpu_name}：原主机空闲 GPU {row.available_gpus} 张，需要 {target.gpu_count} 张，等待库存，下轮继续检测",
+                    subject=target.gpu_name,
+                )
+                continue
             attempt = self.store.begin_attempt(task, row.id, f"power-{uid()}")
             self.store.event(
                 task.id,

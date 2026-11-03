@@ -38,6 +38,7 @@ class AutoDLInstances:
                     status=entry.get("status", "unknown"),
                     start_mode=entry.get("start_mode") or "unknown",
                     billing=entry.get("charge_type", ""),
+                    available_gpus=entry.get("gpu_idle_num"),
                     created_at=entry.get("created_at", ""),
                 )
             )

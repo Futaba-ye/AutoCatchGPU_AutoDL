@@ -192,3 +192,33 @@ async def test_multiple_targets_complete_without_affecting_other_instances(store
     await scheduler.close()
     assert len(store.get(task.id).instances) == 2 and len(notifier.messages) == 2
     assert provider.starts == 2
+
+
+async def test_known_empty_host_waits_without_power_request_then_starts(store):
+    class Allocated(ExistingOnly):
+        async def power_on(self, instance_id):
+            await super().power_on(instance_id)
+            self.account_instances[instance_id].available_gpus = 0
+
+    provider = Allocated()
+    provider.account_instances[INSTANCE].available_gpus = 0
+    scheduler, notifier = prepare(store, provider)
+    task = await scheduler.add_start_task("demo", InstanceSelection(instance_ids=[INSTANCE]))
+    await wait_until(lambda: store.get(task.id).checks >= 3)
+    assert provider.starts == 0 and not store.pending(task.id) and not notifier.messages
+    assert any("空闲 GPU 0 张，需要 1 张" in row["message"] for row in store.events())
+    provider.account_instances[INSTANCE].available_gpus = 1
+    await wait_until(lambda: store.get(task.id).status == "completed")
+    await scheduler.close()
+    assert provider.starts == 1 and len(notifier.messages) == 1
+
+
+async def test_prepaid_reserved_gpu_does_not_use_payg_idle_gate(store):
+    provider = ExistingOnly()
+    provider.account_instances[INSTANCE].available_gpus = 0
+    provider.account_instances[INSTANCE].billing = "monthly"
+    scheduler, _ = prepare(store, provider)
+    task = await scheduler.add_start_task("demo", InstanceSelection(instance_ids=[INSTANCE]))
+    await wait_until(lambda: store.get(task.id).status == "completed")
+    await scheduler.close()
+    assert provider.starts == 1

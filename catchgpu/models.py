@@ -126,6 +126,7 @@ class AccountInstance(Model):
     status: str = "unknown"
     start_mode: str = "unknown"
     billing: str = ""
+    available_gpus: int | None = Field(default=None, ge=0)
     created_at: str = ""
 
     @computed_field

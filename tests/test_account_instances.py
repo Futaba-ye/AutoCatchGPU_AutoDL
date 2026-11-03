@@ -37,6 +37,7 @@ async def test_platform_list_and_power_payloads(pro, token, prefix):
                         "name": "训练环境",
                         "snapshot_gpu_alias_name": "RTX 3090",
                         "req_gpu_amount": 2,
+                        "gpu_idle_num": 0,
                         "status": "shutdown",
                         "start_mode": "gpu",
                         "region_name": "西北B区",
@@ -52,6 +53,7 @@ async def test_platform_list_and_power_payloads(pro, token, prefix):
     adapter = AutoDLInstances(conn, pro=pro)
     page = await adapter.list_instances(2, 20)
     assert page.items[0].can_start and not page.items[0].can_stop
+    assert page.items[0].available_gpus == 0
     assert "SECRET" not in page.model_dump_json() and "password" not in page.model_dump_json()
     await adapter.power_on("owned-instance")
     await adapter.power_off("owned-instance")
